@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.edge-label-container {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: all;
+}
+
+.edge-label-container.pending {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.edge-label-container.accepted {
+  border-color: #10b981;
+  background: #ecfdf5;
+}
