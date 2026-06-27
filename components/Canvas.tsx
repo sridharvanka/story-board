@@ -11,15 +11,21 @@ import '@xyflow/react/dist/style.css'
 import { useProject } from '@/hooks/useProject'
 import { useDebounce } from '@/hooks/useDebounce'
 import { api } from '@/lib/api'
-import { createMindMapPositions } from '@/lib/mindMapLayout'
+import { createMindMapGraph } from '@/lib/mindMapLayout'
 import FragmentNode from './FragmentNode'
+import MindMapNode from './MindMapNode'
+import MindMapRootNode from './MindMapRootNode'
 import ConnectionEdge from './ConnectionEdge'
 import FragmentInput from './FragmentInput'
 import Toolbar, { type View } from './Toolbar'
 import OutlinePanel from './OutlinePanel'
 import PreferenceInspector from './PreferenceInspector'
 
-const NODE_TYPES = { fragmentNode: FragmentNode }
+const NODE_TYPES = {
+  fragmentNode: FragmentNode,
+  mindMapNode: MindMapNode,
+  mindMapRoot: MindMapRootNode,
+}
 const EDGE_TYPES = { connectionEdge: ConnectionEdge }
 
 export default function Canvas({ projectId }: { projectId: number }) {
@@ -62,6 +68,14 @@ export default function Canvas({ projectId }: { projectId: number }) {
 
   // Sync nodes from fragments
   useEffect(() => {
+    if (view === 'mindmap') {
+      const mindMap = createMindMapGraph(projectName, project.fragments, project.connections)
+      setNodes(mindMap.nodes)
+      setEdges(mindMap.edges)
+      setTimeout(() => flowRef.current?.fitView({ padding: 0.12, duration: 300 }), 50)
+      return
+    }
+
     const pendingCount: Record<number, number> = {}
     project.connections.forEach(c => {
       if (c.status === 'pending') {
@@ -70,37 +84,30 @@ export default function Canvas({ projectId }: { projectId: number }) {
       }
     })
 
-    const mindMapPositions = view === 'mindmap'
-      ? createMindMapPositions(project.fragments, project.connections)
-      : null
-
-    setNodes(project.fragments.map(f => {
-      const position = mindMapPositions?.get(f.id) ?? { x: f.pos_x, y: f.pos_y }
-      return {
-        id:       String(f.id),
-        type:     'fragmentNode',
-        position,
-        data: {
-          text:          f.text,
-          url:           f.url,
-          pendingCount:  pendingCount[f.id] || 0,
-          canDelete:     !connectedFragmentIds.has(f.id),
-          isMindMapRoot: view === 'mindmap' && position.x === 0 && position.y === 0,
-          onDelete:      !connectedFragmentIds.has(f.id)
-            ? () => project.deleteFragment(f.id)
-            : undefined,
-        },
-      }
-    }))
+    setNodes(project.fragments.map(f => ({
+      id:       String(f.id),
+      type:     'fragmentNode',
+      position: { x: f.pos_x, y: f.pos_y },
+      data: {
+        text:         f.text,
+        url:          f.url,
+        pendingCount: pendingCount[f.id] || 0,
+        canDelete:    !connectedFragmentIds.has(f.id),
+        onDelete:     !connectedFragmentIds.has(f.id)
+          ? () => project.deleteFragment(f.id)
+          : undefined,
+      },
+    })))
 
     if (view !== 'outline') {
       setTimeout(() => flowRef.current?.fitView({ padding: 0.2, duration: 300 }), 50)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.fragments, project.connections, view])
+  }, [project.fragments, project.connections, projectName, view])
 
   // Sync edges from connections
   useEffect(() => {
+    if (view === 'mindmap') return
     const visible = project.connections.filter(c => c.status !== 'rejected')
     setEdges(visible.map(c => ({
       id:     String(c.id),
@@ -117,7 +124,7 @@ export default function Canvas({ projectId }: { projectId: number }) {
       },
     })))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.connections])
+  }, [project.connections, view])
 
   const onConnect = useCallback((params: RFConnection) => {
     setEdgeLabel('')
@@ -199,20 +206,24 @@ export default function Canvas({ projectId }: { projectId: number }) {
               onInit={instance => { flowRef.current = instance }}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onConnect={view === 'mindmap' ? undefined : onConnect}
               onNodeDragStop={onNodeDragStop}
               nodesDraggable={view !== 'mindmap'}
+              nodesConnectable={view !== 'mindmap'}
+              elementsSelectable={view !== 'mindmap'}
               deleteKeyCode={null}
               nodeTypes={NODE_TYPES}
               edgeTypes={EDGE_TYPES}
               fitView
-              fitViewOptions={{ padding: 0.2 }}
+              fitViewOptions={{ padding: view === 'mindmap' ? 0.12 : 0.2 }}
               minZoom={0.3}
               maxZoom={2}
             >
               <Background color="#e2e8f0" gap={20} />
               <Controls />
-              <MiniMap nodeColor="#6366f1" maskColor="rgba(0,0,0,0.05)" />
+              {view !== 'mindmap' && (
+                <MiniMap nodeColor="#6366f1" maskColor="rgba(0,0,0,0.05)" />
+              )}
             </ReactFlow>
           </div>
         )}

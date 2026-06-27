@@ -8,7 +8,7 @@ An AI-powered idea canvas that finds connections between your fragments of thoug
 
 1. **Capture** — drop fragments of text (facts, quotes, ideas) onto a canvas
 2. **Connect** — AI discovers relationships between fragments and suggests labeled connections (e.g. "evidence for", "causes", "contradicts")
-3. **Visualize** — switch between a freeform graph and an automatic radial mind map
+3. **Visualize** — switch between a freeform graph and an automatic hierarchical mind map
 4. **Outline** — AI arranges your accepted connections into a narrative arc ready to write from
 
 No account required. Each visitor gets an isolated session — zero PII collected.
