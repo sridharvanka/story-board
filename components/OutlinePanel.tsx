@@ -7,13 +7,21 @@ interface Props {
   onGenerate: () => Promise<void>
   onSave: (items: OutlineItem[]) => Promise<void>
   generating: boolean
+  error: string | null
+  fullWidth?: boolean
 }
 
-export default function OutlinePanel({ outline, onGenerate, onSave, generating }: Props) {
-  const [items,   setItems]   = useState<OutlineItem[]>(outline)
+export default function OutlinePanel({
+  outline,
+  onGenerate,
+  onSave,
+  generating,
+  error,
+  fullWidth = false,
+}: Props) {
+  const [items, setItems] = useState<OutlineItem[]>(outline)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
 
-  // Sync when parent outline changes
   useEffect(() => {
     setItems(outline)
   }, [outline])
@@ -33,42 +41,51 @@ export default function OutlinePanel({ outline, onGenerate, onSave, generating }
   function handleDragEnd() {
     setDragIdx(null)
     const ordered = items.map((item, i) => ({ ...item, position: i }))
-    onSave(ordered)
+    onSave(ordered).catch(console.error)
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50 border-l border-gray-200 w-80 shrink-0">
+    <div className={`flex flex-col h-full bg-gray-50 border-l border-gray-200 ${fullWidth ? 'w-full' : 'w-96 shrink-0'}`}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
-        <h2 className="text-sm font-semibold text-gray-800">Story Outline</h2>
+        <div>
+          <h2 className="text-sm font-semibold text-gray-800">Story Outline</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Drag ideas to fine-tune the narrative order.</p>
+        </div>
         <button
           onClick={onGenerate}
           disabled={generating}
-          className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 px-3 py-1 rounded-lg disabled:opacity-50"
+          className="text-xs bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 px-3 py-1.5 rounded-lg disabled:opacity-50"
         >
-          {generating ? 'Generating…' : '✦ Suggest order'}
+          {generating ? 'Generating…' : '✦ Generate outline'}
         </button>
       </div>
+
+      {error && (
+        <div className="mx-4 mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {items.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <p className="text-gray-400 text-sm text-center px-6">
-            Add fragments and click "Suggest order" to generate your outline.
+            Add fragments first, then return here to generate an outline.
           </p>
         </div>
       ) : (
-        <ol className="flex-1 overflow-y-auto p-3 space-y-2">
+        <ol className={`flex-1 overflow-y-auto p-4 space-y-2 ${fullWidth ? 'max-w-4xl w-full mx-auto' : ''}`}>
           {items.map((item, idx) => (
             <li
               key={item.fragment_id}
               draggable
               onDragStart={() => handleDragStart(idx)}
-              onDragOver={e => handleDragOver(e, idx)}
+              onDragOver={event => handleDragOver(event, idx)}
               onDragEnd={handleDragEnd}
               className={`flex gap-3 bg-white border rounded-lg px-3 py-2.5 cursor-grab active:cursor-grabbing
                          ${dragIdx === idx ? 'opacity-50 border-indigo-300' : 'border-gray-200'}`}
             >
               <span className="text-xs text-gray-400 font-mono mt-0.5 shrink-0">{idx + 1}.</span>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm text-gray-800 leading-snug">{item.text}</p>
                 {item.url && (
                   <a
@@ -81,7 +98,7 @@ export default function OutlinePanel({ outline, onGenerate, onSave, generating }
                   </a>
                 )}
               </div>
-              <span className="text-gray-200 text-xs shrink-0 mt-0.5">⠿</span>
+              <span className="text-gray-300 text-sm shrink-0 mt-0.5">⠿</span>
             </li>
           ))}
         </ol>

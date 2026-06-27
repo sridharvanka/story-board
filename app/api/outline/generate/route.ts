@@ -1,76 +1,127 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic()
+interface OpenAIResponse {
+  status?: string
+  output?: Array<{
+    type?: string
+    content?: Array<
+      | { type: 'output_text'; text: string }
+      | { type: 'refusal'; refusal: string }
+    >
+  }>
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { fragments, connections } = await req.json()
 
-    if (!fragments || fragments.length === 0) {
+    if (!Array.isArray(fragments) || fragments.length === 0) {
       return NextResponse.json({ order: [] })
     }
 
+    const apiKey = process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: 'OpenAI is not configured' }, { status: 503 })
+    }
+
     const fragLines = fragments
-      .map((f: { id: number; text: string }) => `  [${f.id}] "${f.text}"`)
+      .map((fragment: { id: number; text: string }) => `[${fragment.id}] ${fragment.text}`)
       .join('\n')
 
-    let connLines = ''
-    if (connections && connections.length > 0) {
-      const accepted = connections.filter((c: { status: string }) => c.status === 'accepted')
-      if (accepted.length > 0) {
-        connLines = '\n\nKnown connections:\n' + accepted
-          .map((c: { from_id: number; label: string; to_id: number }) => `  [${c.from_id}] --${c.label}--> [${c.to_id}]`)
+    const acceptedConnections = Array.isArray(connections)
+      ? connections.filter((connection: { status: string }) => connection.status === 'accepted')
+      : []
+    const connectionLines = acceptedConnections.length > 0
+      ? acceptedConnections
+          .map((connection: { from_id: number; label: string; to_id: number }) =>
+            `[${connection.from_id}] --${connection.label}--> [${connection.to_id}]`
+          )
           .join('\n')
-      }
-    }
+      : 'No accepted connections yet.'
 
-    const systemPrompt = `You are a narrative structure expert. Given a set of idea fragments and their logical connections, suggest the best order to present them as a coherent argument or story.
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_OUTLINE_MODEL || 'gpt-5.4',
+        store: false,
+        reasoning: { effort: 'medium' },
+        max_output_tokens: 4096,
+        input: [
+          {
+            role: 'developer',
+            content: `You are a narrative structure editor. Arrange every supplied fragment exactly once into a coherent story or argument.
 
-Follow this general narrative arc:
-1. HOOK — the surprising or counterintuitive claim that grabs attention
-2. CONTEXT — background the reader needs to follow the argument
-3. MECHANISM — the core explanation of how/why
-4. EVIDENCE — supporting facts, examples, analogies
-5. IMPLICATION — what this means, consequences, so-what
+Prefer this arc when the material supports it:
+1. Hook: a surprising, vivid, or consequential idea.
+2. Context: background needed to understand the subject.
+3. Mechanism: how or why the central idea works.
+4. Evidence: supporting facts, examples, and analogies.
+5. Implication: consequences, meaning, or the so-what.
 
-Not every category will be present. Work with what's there.
-
-You MUST respond with ONLY a JSON array of fragment IDs in your suggested order. No prose. No markdown.
-Example: [3, 1, 5, 2, 4]`
-
-    const userPrompt = `Suggest the best narrative order for these fragments:\n\n${fragLines}${connLines}\n\nReturn only a JSON array of fragment IDs in the order they should appear.`
-
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 256,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+Treat accepted connections as useful structural evidence, not absolute constraints. Preserve causal and explanatory dependencies. Return every valid fragment ID exactly once and do not invent IDs.`,
+          },
+          {
+            role: 'user',
+            content: `Fragments:\n${fragLines}\n\nAccepted connections:\n${connectionLines}\n\nReturn the best narrative order.`,
+          },
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'story_outline',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                order: {
+                  type: 'array',
+                  items: { type: 'integer' },
+                  minItems: 1,
+                  maxItems: fragments.length,
+                },
+              },
+              required: ['order'],
+              additionalProperties: false,
+            },
+          },
+        },
+      }),
     })
 
-    let raw = (message.content[0] as { text: string }).text.trim()
-    if (raw.startsWith('```')) {
-      raw = raw.split('```')[1]
-      if (raw.startsWith('json')) raw = raw.slice(4)
-    }
-    raw = raw.trim()
-
-    const order = JSON.parse(raw)
-    if (!Array.isArray(order)) {
-      return NextResponse.json({ order: fragments.map((f: { id: number }) => f.id) })
+    if (!response.ok) {
+      console.error('[api/outline/generate] OpenAI error', response.status)
+      return NextResponse.json({ error: 'Outline generation failed' }, { status: 502 })
     }
 
-    const fragIds = new Set(fragments.map((f: { id: number }) => f.id))
-    const validOrder: number[] = order.filter((id: unknown) => typeof id === 'number' && fragIds.has(id))
+    const result = await response.json() as OpenAIResponse
+    const content = result.output
+      ?.find(item => item.type === 'message')
+      ?.content?.find(item => item.type === 'output_text' || item.type === 'refusal')
 
-    // Append any fragment that the model missed
-    for (const f of fragments as { id: number }[]) {
-      if (!validOrder.includes(f.id)) validOrder.push(f.id)
+    if (!content || content.type === 'refusal' || result.status === 'incomplete') {
+      return NextResponse.json({ error: 'Outline generation was incomplete' }, { status: 502 })
     }
 
-    return NextResponse.json({ order: validOrder })
-  } catch (e) {
-    console.error('[api/outline/generate]', e)
+    const parsed = JSON.parse(content.text) as { order?: unknown }
+    const fragmentIds = new Set<number>(
+      fragments.map((fragment: { id: number }) => fragment.id)
+    )
+    const order = Array.isArray(parsed.order)
+      ? parsed.order.filter((id): id is number => typeof id === 'number' && fragmentIds.has(id))
+      : []
+    const uniqueOrder = Array.from(new Set(order))
+
+    for (const fragment of fragments as { id: number }[]) {
+      if (!uniqueOrder.includes(fragment.id)) uniqueOrder.push(fragment.id)
+    }
+
+    return NextResponse.json({ order: uniqueOrder })
+  } catch (error) {
+    console.error('[api/outline/generate]', error)
     return NextResponse.json({ error: 'Outline generation failed' }, { status: 500 })
   }
 }

@@ -6,14 +6,15 @@ interface FragmentNodeData {
   url: string | null
   pendingCount: number
   canDelete: boolean
+  isMindMapRoot?: boolean
   onDelete?: () => void
 }
 
 export default function FragmentNode({ data }: { data: FragmentNodeData }) {
-  const { text, url, pendingCount, canDelete, onDelete } = data
+  const { text, url, pendingCount, canDelete, isMindMapRoot, onDelete } = data
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm w-52 relative group">
+    <div className={`bg-white border rounded-xl shadow-sm w-52 relative group ${isMindMapRoot ? 'border-indigo-500 ring-4 ring-indigo-100' : 'border-gray-200'}`}>
       <Handle type="target" position={Position.Top} className="!bg-gray-300 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} className="!bg-gray-300 !w-2 !h-2" />
 

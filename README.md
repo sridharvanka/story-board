@@ -8,7 +8,8 @@ An AI-powered idea canvas that finds connections between your fragments of thoug
 
 1. **Capture** — drop fragments of text (facts, quotes, ideas) onto a canvas
 2. **Connect** — AI discovers relationships between fragments and suggests labeled connections (e.g. "evidence for", "causes", "contradicts")
-3. **Outline** — AI arranges your accepted connections into a narrative arc ready to write from
+3. **Visualize** — switch between a freeform graph and an automatic radial mind map
+4. **Outline** — AI arranges your accepted connections into a narrative arc ready to write from
 
 No account required. Each visitor gets an isolated session — zero PII collected.
 
@@ -22,7 +23,7 @@ Authentication was deliberately omitted. The app uses ephemeral anonymous sessio
 |-------|--------|
 | Framework | Next.js 14 App Router |
 | Database | Supabase (PostgreSQL) |
-| AI | OpenAI Responses API for text splitting; Claude for connections and outlines |
+| AI | OpenAI Responses API for text splitting and outlines; Claude for connection discovery |
 | Graph canvas | XyFlow v12 |
 | Styling | Tailwind CSS |
 | Language | TypeScript (strict) |

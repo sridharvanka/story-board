@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   ReactFlow, Background, Controls, MiniMap,
   useNodesState, useEdgesState,
-  type Node, type Edge,
+  type Node, type Edge, type ReactFlowInstance,
   type Connection as RFConnection,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -11,10 +11,11 @@ import '@xyflow/react/dist/style.css'
 import { useProject } from '@/hooks/useProject'
 import { useDebounce } from '@/hooks/useDebounce'
 import { api } from '@/lib/api'
+import { createMindMapPositions } from '@/lib/mindMapLayout'
 import FragmentNode from './FragmentNode'
 import ConnectionEdge from './ConnectionEdge'
 import FragmentInput from './FragmentInput'
-import Toolbar from './Toolbar'
+import Toolbar, { type View } from './Toolbar'
 import OutlinePanel from './OutlinePanel'
 import PreferenceInspector from './PreferenceInspector'
 
@@ -25,14 +26,16 @@ export default function Canvas({ projectId }: { projectId: number }) {
   const project = useProject(projectId)
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
-  const [view,             setView]             = useState<'graph' | 'outline' | 'split'>('graph')
+  const [view,             setView]             = useState<View>('graph')
   const [showPrefs,        setShowPrefs]        = useState(false)
   const [discovering,      setDiscovering]      = useState(false)
   const [generatingOutline,setGeneratingOutline]= useState(false)
+  const [outlineError,      setOutlineError]      = useState<string | null>(null)
   const [projectName,      setProjectName]      = useState('')
   const [pendingEdge,      setPendingEdge]      = useState<{ source: string; target: string } | null>(null)
   const [edgeLabel,        setEdgeLabel]        = useState('')
   const labelInputRef = useRef<HTMLInputElement>(null)
+  const flowRef = useRef<ReactFlowInstance | null>(null)
   const connectedFragmentIds = new Set(
     project.connections
       .filter(connection => connection.status !== 'rejected')
@@ -67,22 +70,34 @@ export default function Canvas({ projectId }: { projectId: number }) {
       }
     })
 
-    setNodes(project.fragments.map(f => ({
-      id:       String(f.id),
-      type:     'fragmentNode',
-      position: { x: f.pos_x, y: f.pos_y },
-      data: {
-        text:         f.text,
-        url:          f.url,
-        pendingCount: pendingCount[f.id] || 0,
-        canDelete:    !connectedFragmentIds.has(f.id),
-        onDelete:     !connectedFragmentIds.has(f.id)
-          ? () => project.deleteFragment(f.id)
-          : undefined,
-      },
-    })))
+    const mindMapPositions = view === 'mindmap'
+      ? createMindMapPositions(project.fragments, project.connections)
+      : null
+
+    setNodes(project.fragments.map(f => {
+      const position = mindMapPositions?.get(f.id) ?? { x: f.pos_x, y: f.pos_y }
+      return {
+        id:       String(f.id),
+        type:     'fragmentNode',
+        position,
+        data: {
+          text:          f.text,
+          url:           f.url,
+          pendingCount:  pendingCount[f.id] || 0,
+          canDelete:     !connectedFragmentIds.has(f.id),
+          isMindMapRoot: view === 'mindmap' && position.x === 0 && position.y === 0,
+          onDelete:      !connectedFragmentIds.has(f.id)
+            ? () => project.deleteFragment(f.id)
+            : undefined,
+        },
+      }
+    }))
+
+    if (view !== 'outline') {
+      setTimeout(() => flowRef.current?.fitView({ padding: 0.2, duration: 300 }), 50)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project.fragments, project.connections])
+  }, [project.fragments, project.connections, view])
 
   // Sync edges from connections
   useEffect(() => {
@@ -149,11 +164,17 @@ export default function Canvas({ projectId }: { projectId: number }) {
 
   async function handleGenerateOutline() {
     setGeneratingOutline(true)
-    try { await project.generateOutline() }
-    finally { setGeneratingOutline(false) }
+    setOutlineError(null)
+    try {
+      await project.generateOutline()
+    } catch (error) {
+      setOutlineError(error instanceof Error ? error.message : 'Outline generation failed')
+    } finally {
+      setGeneratingOutline(false)
+    }
   }
 
-  const showGraph   = view === 'graph'   || view === 'split'
+  const showGraph   = view === 'graph' || view === 'mindmap' || view === 'split'
   const showOutline = view === 'outline' || view === 'split'
 
   return (
@@ -175,10 +196,12 @@ export default function Canvas({ projectId }: { projectId: number }) {
             <ReactFlow
               nodes={nodes}
               edges={edges}
+              onInit={instance => { flowRef.current = instance }}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodeDragStop={onNodeDragStop}
+              nodesDraggable={view !== 'mindmap'}
               deleteKeyCode={null}
               nodeTypes={NODE_TYPES}
               edgeTypes={EDGE_TYPES}
@@ -200,6 +223,8 @@ export default function Canvas({ projectId }: { projectId: number }) {
             onGenerate={handleGenerateOutline}
             onSave={project.saveOutline}
             generating={generatingOutline}
+            error={outlineError}
+            fullWidth={view === 'outline'}
           />
         )}
       </div>

@@ -1,18 +1,25 @@
 'use client'
 import { useRouter } from 'next/navigation'
 
-type View = 'graph' | 'outline' | 'split'
+export type View = 'graph' | 'mindmap' | 'outline' | 'split'
 
 interface Props {
   projectName: string
   view: View
-  onToggleView: (v: View) => void
+  onToggleView: (view: View) => void
   onDiscover: () => void
   onDeleteUnconnected: () => void
   onTogglePreferences: () => void
   discovering: boolean
   unconnectedCount: number
 }
+
+const VIEWS: Array<{ value: View; label: string }> = [
+  { value: 'graph', label: 'Graph' },
+  { value: 'mindmap', label: 'Mind map' },
+  { value: 'outline', label: 'Outline' },
+  { value: 'split', label: 'Both' },
+]
 
 export default function Toolbar({
   projectName,
@@ -27,15 +34,15 @@ export default function Toolbar({
   const router = useRouter()
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shrink-0">
-      <div className="flex items-center gap-3">
+    <div className="flex items-center justify-between gap-4 px-4 py-2 bg-white border-b border-gray-200 shrink-0 overflow-x-auto">
+      <div className="flex items-center gap-3 shrink-0">
         <button onClick={() => router.push('/')} className="text-gray-400 hover:text-gray-700 text-sm">
           ← Projects
         </button>
         <span className="text-sm font-semibold text-gray-800">{projectName}</span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         <button
           onClick={onDiscover}
           disabled={discovering}
@@ -60,13 +67,13 @@ export default function Toolbar({
         </button>
 
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">
-          {(['graph', 'outline', 'split'] as const).map(v => (
+          {VIEWS.map(option => (
             <button
-              key={v}
-              onClick={() => onToggleView(v)}
-              className={`px-3 py-1.5 capitalize ${view === v ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+              key={option.value}
+              onClick={() => onToggleView(option.value)}
+              className={`px-3 py-1.5 whitespace-nowrap ${view === option.value ? 'bg-indigo-600 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
             >
-              {v === 'split' ? 'Both' : v.charAt(0).toUpperCase() + v.slice(1)}
+              {option.label}
             </button>
           ))}
         </div>
