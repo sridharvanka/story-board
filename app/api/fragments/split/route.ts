@@ -1,7 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const MAX_INPUT_LENGTH = 20_000
-const MAX_FRAGMENTS = 40
+const MAX_FRAGMENTS = 60
+
+const ATOMIC_IDEA_INSTRUCTIONS = `
+You extract semantic propositions from prose. Do not split text mechanically at sentence boundaries.
+
+An atomic idea is the smallest self-contained claim that:
+- names or clearly identifies its subject;
+- makes one main assertion about that subject; and
+- can be understood without seeing the surrounding paragraph.
+
+Process the complete passage before writing fragments:
+1. Identify claims by meaning, not punctuation. One sentence may contain several atomic ideas. Several sentences may need context combined into one standalone idea.
+2. Split compound claims when each part communicates an independently useful fact, cause, contrast, result, or interpretation.
+3. Resolve pronouns and context-dependent references such as "it," "they," "this," "that," "these animals," "then," and "after that" by naming the actual subject or event.
+4. Rewrite only enough to make each idea standalone. Preserve the author's meaning, attribution, uncertainty, negation, quantities, and causal direction. Never strengthen "may" into "does" or "appears" into certainty.
+5. Remove structural narration such as "first," "second," "then there is," and "the answer is" unless it carries substantive meaning.
+6. Do not output headings, sentence fragments, transition phrases, duplicate ideas, commentary, or facts not present in the source.
+7. Preserve the original order of ideas.
+
+Before returning an item, test it in isolation. Reject or rewrite it if a reader would ask "what does it/that refer to?" or "after what?" Each item should normally contain an explicit subject and predicate.
+
+Examples:
+
+Input: "Occasionally, a dead fish or whale carcass lands on the seafloor. Then, for a brief time, there is a feast. After that, the famine returns."
+Output:
+- "Occasionally, a large food source such as a dead fish or whale carcass reaches the seafloor."
+- "A large carcass creates a brief feast for deep-sea animals."
+- "Food scarcity returns after the carcass is consumed."
+
+Input: "At ordinary temperatures, ND1 sped metabolism up and made starvation harder to withstand."
+Output:
+- "At ordinary temperatures, ND1 increased metabolism."
+- "At ordinary temperatures, ND1 reduced starvation tolerance."
+
+Input: "The researchers found Chlamydiae linked to fat storage. These bacteria may help the isopod bank energy."
+Output:
+- "Researchers linked Chlamydiae bacteria to fat storage in the isopod."
+- "Chlamydiae bacteria may help the isopod store energy."
+`.trim()
 
 interface OpenAIResponse {
   status?: string
@@ -43,35 +81,33 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-5.4-mini',
+        model: process.env.OPENAI_FRAGMENT_MODEL || 'gpt-5.4',
         store: false,
-        reasoning: { effort: 'low' },
-        max_output_tokens: 4096,
+        reasoning: { effort: 'medium' },
+        max_output_tokens: 8192,
         input: [
+          { role: 'developer', content: ATOMIC_IDEA_INSTRUCTIONS },
           {
-            role: 'developer',
-            content: [
-              'Break the user text into atomic idea fragments.',
-              'Each fragment must express one meaningful, self-contained idea.',
-              'Preserve the author’s meaning and wording where practical.',
-              'Do not add facts, commentary, headings, or interpretation.',
-              'Keep related clauses together when separating them would make either fragment unclear.',
-              `Return no more than ${MAX_FRAGMENTS} fragments.`,
-            ].join(' '),
+            role: 'user',
+            content: `Extract atomic, standalone ideas from this passage:\n\n${input}`,
           },
-          { role: 'user', content: input },
         ],
         text: {
           format: {
             type: 'json_schema',
-            name: 'idea_fragments',
+            name: 'atomic_ideas',
             strict: true,
             schema: {
               type: 'object',
               properties: {
                 fragments: {
                   type: 'array',
-                  items: { type: 'string', minLength: 1 },
+                  description: 'Atomic, standalone ideas in source order.',
+                  items: {
+                    type: 'string',
+                    description: 'One self-contained semantic proposition with an explicit subject and one main assertion.',
+                    minLength: 1,
+                  },
                   minItems: 1,
                   maxItems: MAX_FRAGMENTS,
                 },
@@ -97,7 +133,7 @@ export async function POST(req: NextRequest) {
 
     const content = result.output
       ?.find(item => item.type === 'message')
-      ?.content?.[0]
+      ?.content?.find(item => item.type === 'output_text' || item.type === 'refusal')
 
     if (!content || content.type === 'refusal') {
       return NextResponse.json({ error: 'The text could not be processed' }, { status: 422 })
