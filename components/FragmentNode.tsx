@@ -5,15 +5,16 @@ interface FragmentNodeData {
   text: string
   url: string | null
   pendingCount: number
-  onDelete: () => void
+  canDelete: boolean
+  onDelete?: () => void
 }
 
 export default function FragmentNode({ data }: { data: FragmentNodeData }) {
-  const { text, url, pendingCount, onDelete } = data
+  const { text, url, pendingCount, canDelete, onDelete } = data
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm w-52 relative group">
-      <Handle type="target" position={Position.Top}    className="!bg-gray-300 !w-2 !h-2" />
+      <Handle type="target" position={Position.Top} className="!bg-gray-300 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} className="!bg-gray-300 !w-2 !h-2" />
 
       <div className="p-3">
@@ -39,14 +40,17 @@ export default function FragmentNode({ data }: { data: FragmentNodeData }) {
         )}
       </div>
 
-      <button
-        onClick={e => { e.stopPropagation(); onDelete() }}
-        className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-100 text-red-400 text-xs
-                   items-center justify-center hidden group-hover:flex hover:bg-red-200"
-        title="Delete fragment"
-      >
-        ×
-      </button>
+      {canDelete && onDelete && (
+        <button
+          onClick={e => { e.stopPropagation(); onDelete() }}
+          className="nodrag nopan absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-100 text-red-500 text-sm
+                     items-center justify-center hidden group-hover:flex hover:bg-red-200"
+          title="Delete unconnected fragment"
+          aria-label="Delete unconnected fragment"
+        >
+          ×
+        </button>
+      )}
     </div>
   )
 }

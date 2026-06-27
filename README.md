@@ -22,7 +22,7 @@ Authentication was deliberately omitted. The app uses ephemeral anonymous sessio
 |-------|--------|
 | Framework | Next.js 14 App Router |
 | Database | Supabase (PostgreSQL) |
-| AI | Claude (claude-sonnet-4-6) via Anthropic SDK |
+| AI | OpenAI Responses API for text splitting; Claude for connections and outlines |
 | Graph canvas | XyFlow v12 |
 | Styling | Tailwind CSS |
 | Language | TypeScript (strict) |
@@ -46,6 +46,7 @@ Create a project at [supabase.com](https://supabase.com), then run [`supabase/sc
 Copy `.env.local.example` to `.env.local` and fill in your keys:
 ```
 ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```

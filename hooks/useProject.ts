@@ -39,6 +39,18 @@ export function useProject(projectId: number) {
     return frag
   }, [projectId, fragments.length])
 
+  const addFragments = useCallback(async (texts: string[], url: string | null) => {
+    const startIndex = fragments.length
+    const added = await Promise.all(texts.map((text, index) => {
+      const position = startIndex + index
+      const pos_x = 100 + (position % 4) * 220
+      const pos_y = 80 + Math.floor(position / 4) * 160
+      return api.addFragment(projectId, { text, url, pos_x, pos_y })
+    }))
+    setFragments(prev => [...prev, ...added])
+    return added
+  }, [projectId, fragments.length])
+
   const updateFragmentPosition = useCallback(async (id: number, pos_x: number, pos_y: number) => {
     await api.updateFragment(id, { pos_x, pos_y })
     setFragments(prev => prev.map(f => f.id === id ? { ...f, pos_x, pos_y } : f))
@@ -48,6 +60,16 @@ export function useProject(projectId: number) {
     await api.deleteFragment(id)
     setFragments(prev => prev.filter(f => f.id !== id))
     setConnections(prev => prev.filter(c => c.from_id !== id && c.to_id !== id))
+    setOutline(prev => prev.filter(item => item.fragment_id !== id))
+  }, [])
+
+  const deleteFragments = useCallback(async (ids: number[]) => {
+    if (ids.length === 0) return
+    const idSet = new Set(ids)
+    await Promise.all(ids.map(id => api.deleteFragment(id)))
+    setFragments(prev => prev.filter(f => !idSet.has(f.id)))
+    setConnections(prev => prev.filter(c => !idSet.has(c.from_id) && !idSet.has(c.to_id)))
+    setOutline(prev => prev.filter(item => !idSet.has(item.fragment_id)))
   }, [])
 
   const discoverConnections = useCallback(async () => {
@@ -94,7 +116,7 @@ export function useProject(projectId: number) {
     fragments, connections, outline,
     loading, error,
     load,
-    addFragment, updateFragmentPosition, deleteFragment,
+    addFragment, addFragments, updateFragmentPosition, deleteFragment, deleteFragments,
     discoverConnections,
     updateConnection, addConnection, deleteConnection,
     generateOutline, saveOutline,

@@ -33,6 +33,14 @@ export default function Canvas({ projectId }: { projectId: number }) {
   const [pendingEdge,      setPendingEdge]      = useState<{ source: string; target: string } | null>(null)
   const [edgeLabel,        setEdgeLabel]        = useState('')
   const labelInputRef = useRef<HTMLInputElement>(null)
+  const connectedFragmentIds = new Set(
+    project.connections
+      .filter(connection => connection.status !== 'rejected')
+      .flatMap(connection => [connection.from_id, connection.to_id])
+  )
+  const unconnectedFragmentIds = project.fragments
+    .filter(fragment => !connectedFragmentIds.has(fragment.id))
+    .map(fragment => fragment.id)
 
   useEffect(() => {
     project.load()
@@ -67,7 +75,10 @@ export default function Canvas({ projectId }: { projectId: number }) {
         text:         f.text,
         url:          f.url,
         pendingCount: pendingCount[f.id] || 0,
-        onDelete:     () => project.deleteFragment(f.id),
+        canDelete:    !connectedFragmentIds.has(f.id),
+        onDelete:     !connectedFragmentIds.has(f.id)
+          ? () => project.deleteFragment(f.id)
+          : undefined,
       },
     })))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +126,21 @@ export default function Canvas({ projectId }: { projectId: number }) {
     triggerDiscover()
   }
 
+  async function handleSplitText(text: string, url: string | null) {
+    const fragments = await api.splitText(text)
+    await project.addFragments(fragments, url)
+    triggerDiscover()
+    return fragments.length
+  }
+
+  async function handleDeleteUnconnected() {
+    if (unconnectedFragmentIds.length === 0) return
+    const confirmed = window.confirm(
+      `Delete ${unconnectedFragmentIds.length} unconnected fragment${unconnectedFragmentIds.length === 1 ? '' : 's'}?`
+    )
+    if (confirmed) await project.deleteFragments(unconnectedFragmentIds)
+  }
+
   async function handleDiscover() {
     setDiscovering(true)
     try { await project.discoverConnections() }
@@ -137,8 +163,10 @@ export default function Canvas({ projectId }: { projectId: number }) {
         view={view}
         onToggleView={setView}
         onDiscover={handleDiscover}
+        onDeleteUnconnected={handleDeleteUnconnected}
         onTogglePreferences={() => setShowPrefs(v => !v)}
         discovering={discovering}
+        unconnectedCount={unconnectedFragmentIds.length}
       />
 
       <div className="flex flex-1 min-h-0">
@@ -151,6 +179,7 @@ export default function Canvas({ projectId }: { projectId: number }) {
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onNodeDragStop={onNodeDragStop}
+              deleteKeyCode={null}
               nodeTypes={NODE_TYPES}
               edgeTypes={EDGE_TYPES}
               fitView
@@ -175,7 +204,11 @@ export default function Canvas({ projectId }: { projectId: number }) {
         )}
       </div>
 
-      <FragmentInput onAdd={handleAddFragment} discovering={discovering} />
+      <FragmentInput
+        onAdd={handleAddFragment}
+        onSplit={handleSplitText}
+        discovering={discovering}
+      />
 
       {showPrefs && <PreferenceInspector onClose={() => setShowPrefs(false)} />}
 

@@ -8,11 +8,22 @@ interface Props {
   view: View
   onToggleView: (v: View) => void
   onDiscover: () => void
+  onDeleteUnconnected: () => void
   onTogglePreferences: () => void
   discovering: boolean
+  unconnectedCount: number
 }
 
-export default function Toolbar({ projectName, view, onToggleView, onDiscover, onTogglePreferences, discovering }: Props) {
+export default function Toolbar({
+  projectName,
+  view,
+  onToggleView,
+  onDiscover,
+  onDeleteUnconnected,
+  onTogglePreferences,
+  discovering,
+  unconnectedCount,
+}: Props) {
   const router = useRouter()
 
   return (
@@ -36,6 +47,16 @@ export default function Toolbar({ projectName, view, onToggleView, onDiscover, o
             : <span>✦</span>
           }
           {discovering ? 'Discovering…' : 'Find connections'}
+        </button>
+
+        <button
+          onClick={onDeleteUnconnected}
+          disabled={unconnectedCount === 0}
+          className="text-xs border border-red-200 text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg
+                     disabled:opacity-40 disabled:hover:bg-transparent"
+          title="Delete every fragment without a visible connection"
+        >
+          Delete unconnected{unconnectedCount > 0 ? ` (${unconnectedCount})` : ''}
         </button>
 
         <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs">

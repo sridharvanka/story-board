@@ -15,6 +15,17 @@ export const api = {
     store.updateFragment(id, data),
   deleteFragment: (id: number) => store.deleteFragment(id),
 
+  splitText: async (text: string): Promise<string[]> => {
+    const res = await fetch('/api/fragments/split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+    const result = await res.json().catch(() => ({ error: 'Could not split the text' }))
+    if (!res.ok) throw new Error(result.error || 'Could not split the text')
+    return result.fragments || []
+  },
+
   // --- Connections ---
   listConnections: (pid: number) => store.listConnections(pid),
 
