@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { rateLimit, getIp } from '@/lib/ratelimit'
 
 const client = new Anthropic()
 
@@ -26,6 +27,14 @@ function relevantPreferences(preferences: Pref[], fragments: Array<{ text: strin
 }
 
 export async function POST(req: NextRequest) {
+  const { allowed, remaining, retryAfterSec } = rateLimit(`discover:${getIp(req)}`, 10, 60_000)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please wait before trying again.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec), 'X-RateLimit-Remaining': '0' } }
+    )
+  }
+
   try {
     const { fragments, existing_pairs, preferences } = await req.json()
 

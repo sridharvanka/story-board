@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, getIp } from '@/lib/ratelimit'
 
 const MAX_INPUT_LENGTH = 20_000
 const MAX_FRAGMENTS = 60
@@ -54,6 +55,14 @@ interface OpenAIResponse {
 }
 
 export async function POST(req: NextRequest) {
+  const { allowed, remaining, retryAfterSec } = rateLimit(`split:${getIp(req)}`, 5, 60_000)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please wait before trying again.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec), 'X-RateLimit-Remaining': '0' } }
+    )
+  }
+
   try {
     const { text } = await req.json()
 

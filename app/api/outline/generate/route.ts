@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, getIp } from '@/lib/ratelimit'
 
 interface OpenAIResponse {
   status?: string
@@ -12,6 +13,14 @@ interface OpenAIResponse {
 }
 
 export async function POST(req: NextRequest) {
+  const { allowed, remaining, retryAfterSec } = rateLimit(`outline:${getIp(req)}`, 5, 60_000)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please wait before trying again.' },
+      { status: 429, headers: { 'Retry-After': String(retryAfterSec), 'X-RateLimit-Remaining': '0' } }
+    )
+  }
+
   try {
     const { fragments, connections } = await req.json()
 
